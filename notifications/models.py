@@ -5,36 +5,26 @@ from tenants.models import BusinessTenant
 
 
 class Template(models.Model):
-    """
-    Notification templates per tenant.
-    Templates define the structure of notifications with variable placeholders.
-    """
     CHANNEL_CHOICES = [
-        ("email", "Email"),
+        ("email", "EMAIL"),
         ("sms", "SMS"),
-        ("whatsapp", "WhatsApp"),
-        ("push", "Push Notification"),
+        ("whatsapp", "WHATSAPP"),
+        ("push", "PUSH_NOTIFICATION"),
     ]
 
     tenant = models.ForeignKey(
-        BusinessTenant,
-        on_delete=models.CASCADE,
-        related_name="templates",
+        BusinessTenant, on_delete=models.CASCADE, related_name="templates",
         help_text="The tenant this template belongs to"
     )
     name = models.CharField(
-        max_length=255,
-        help_text="Template name/identifier"
+        max_length=255, help_text="Template name/identifier"
     )
     channel = models.CharField(
-        max_length=20,
-        choices=CHANNEL_CHOICES,
+        max_length=20, choices=CHANNEL_CHOICES,
         help_text="Notification channel type"
     )
     subject = models.CharField(
-        max_length=255,
-        blank=True,
-        null=True,
+        max_length=255, blank=True, null=True,
         help_text="Subject line (for email/push notifications)"
     )
     body = models.TextField(
@@ -42,11 +32,11 @@ class Template(models.Model):
         help_text="Template body with variable placeholders (e.g., {{name}}, {{code}})"
     )
     variables = models.JSONField(
-        default=dict,
-        blank=True,
+        default=dict, blank=True,
         help_text="JSON schema or description of expected variables"
     )
-    is_active = models.BooleanField(default=True, help_text="Whether this template is active")
+    is_active = models.BooleanField(default=True,
+                                    help_text="Whether this template is active")
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -62,80 +52,62 @@ class Template(models.Model):
 
 
 class Notification(models.Model):
-    """
-    Represents a single notification send request.
-    Stores all details about the notification including status and provider responses.
-    """
     STATUS_CHOICES = [
-        ("pending", "Pending"),
-        ("processing", "Processing"),
-        ("sent", "Sent"),
-        ("failed", "Failed"),
-        ("delivered", "Delivered"),  # For channels that support delivery confirmation
+        ("pending", "PENDING"),
+        ("processing", "PROCESSING"),
+        ("sent", "SENT"),
+        ("failed", "FAILED"),
+        ("delivered", "DELIVERED"),
+        # For channels that support delivery confirmation
     ]
 
     CHANNEL_CHOICES = [
-        ("email", "Email"),
+        ("email", "EMAIL"),
         ("sms", "SMS"),
-        ("whatsapp", "WhatsApp"),
-        ("push", "Push Notification"),
+        ("whatsapp", "WHATSAPP"),
+        ("push", "PUSH_NOTIFICATION"),
     ]
 
     id = models.UUIDField(
-        primary_key=True,
-        default=uuid.uuid4,
-        editable=False,
+        primary_key=True, default=uuid.uuid4, editable=False,
         help_text="Unique identifier for the notification"
     )
     tenant = models.ForeignKey(
-        BusinessTenant,
-        on_delete=models.CASCADE,
-        related_name="notifications",
+        BusinessTenant, on_delete=models.CASCADE, related_name="notifications",
         help_text="The tenant sending this notification"
     )
     template = models.ForeignKey(
-        Template,
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
+        Template, on_delete=models.SET_NULL, null=True, blank=True,
         related_name="notifications",
         help_text="Template used for this notification (optional)"
     )
     channel = models.CharField(
-        max_length=20,
-        choices=CHANNEL_CHOICES,
-        help_text="Notification channel"
+        max_length=20, choices=CHANNEL_CHOICES, help_text="Notification channel"
     )
     to = models.CharField(
         max_length=255,
         help_text="Recipient address (email, phone, device token, etc.)"
     )
     data = models.JSONField(
-        default=dict,
-        blank=True,
+        default=dict, blank=True,
         help_text="Template variables/data for rendering"
     )
     status = models.CharField(
-        max_length=20,
-        choices=STATUS_CHOICES,
-        default="pending",
+        max_length=20, choices=STATUS_CHOICES, default="pending",
         help_text="Current status of the notification"
     )
     provider_response = models.JSONField(
-        default=dict,
-        blank=True,
+        default=dict, blank=True,
         help_text="Response from the provider (SES, Twilio, etc.) including delivery details"
     )
     error_message = models.TextField(
-        blank=True,
-        null=True,
+        blank=True, null=True,
         help_text="Error message if the notification failed"
     )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     sent_at = models.DateTimeField(
-        null=True,
-        blank=True,
+        null=True, blank=True,
         help_text="Timestamp when the notification was successfully sent"
     )
 
@@ -155,19 +127,11 @@ class Notification(models.Model):
 
 
 class DeadLetter(models.Model):
-    """
-    Stores notifications that have permanently failed after all retry attempts.
-    This is useful for debugging and manual intervention.
-    """
     id = models.UUIDField(
-        primary_key=True,
-        default=uuid.uuid4,
-        editable=False
+        primary_key=True, default=uuid.uuid4, editable=False
     )
     notification = models.OneToOneField(
-        Notification,
-        on_delete=models.CASCADE,
-        related_name="dead_letter",
+        Notification, on_delete=models.CASCADE, related_name="dead_letter",
         help_text="The notification that failed permanently"
     )
     reason = models.TextField(
