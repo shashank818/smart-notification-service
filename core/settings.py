@@ -49,6 +49,9 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    # Custom API key auth and tenant isolation
+    'tenants.middleware.APIKeyAuthenticationMiddleware',
+    'tenants.middleware.TenantIsolationMiddleware',
 ]
 
 ROOT_URLCONF = 'core.urls'
