@@ -664,3 +664,113 @@ smart-notification-service/
 ## License
 
 Private - All rights reserved.
+
+---
+
+## User Flows & APIs
+
+### 1. Tenant onboarding & API key
+
+- **Goal**: A new customer (tenant) signs up and obtains an API key.
+- **Steps & APIs**:
+  - **Register tenant**
+    - **API**: `POST /v1/tenants/register/`
+    - **Auth**: none
+    - **Body**:
+      - `name`, `email`
+    - **Result**: Creates a `BusinessTenant` and returns:
+      - `tenant` object (with `tenant_id`)
+      - **initial API key** (plain `api_key.key` – shown only once)
+  - **Get current tenant profile**
+    - **API**: `GET /v1/tenants/me/`
+    - **Auth**: `X-API-KEY`
+    - **Use**: Dashboard shows tenant name, status, etc.
+  - **Manage API keys**
+    - **List keys**:
+      - **API**: `GET /v1/api-keys/`
+      - **Auth**: `X-API-KEY`
+    - **Create new key**:
+      - **API**: `POST /v1/api-keys/`
+      - **Body**: `{ "name": "My server key", "is_test": false }`
+      - **Result**: New key + plain value (only once)
+    - **Deactivate key**:
+      - **API**: `POST /v1/api-keys/{id}/deactivate/`
+      - **Auth**: `X-API-KEY` of another active key
+
+### 2. Template management
+
+- **Goal**: Tenant defines reusable content for emails/SMS/etc.
+- **APIs (all require `X-API-KEY`)**:
+  - **Create template**
+    - `POST /v1/templates/`
+    - Body example:
+      - `{"name":"welcome_email","channel":"email","subject":"Welcome, {{name}}","body":"Hi {{name}}, welcome to {{company}}!","variables":{"name":"string","company":"string"},"is_active":true}`
+  - **List templates**
+    - `GET /v1/templates/`
+    - Returns all templates for `request.tenant`.
+  - **Retrieve single template**
+    - `GET /v1/templates/{id}/`
+  - **Update template**
+    - `PUT /v1/templates/{id}/`
+  - **Delete template**
+    - `DELETE /v1/templates/{id}/`
+  - **Preview template rendering**
+    - `POST /v1/templates/{id}/preview/`
+    - Body: `{ "data": { "name": "John", "company": "Acme" } }`
+    - Result: Rendered `subject` and `body` (without sending).
+
+### 3. Sending notifications using templates
+
+- **Goal**: Tenant triggers notifications through the unified API.
+- **API**: `POST /v1/notify/`
+- **Auth**: `X-API-KEY`
+- **Body (template-based)**:
+  - `channel`: `"email" | "sms" | "whatsapp" | "push"`
+  - `to`: recipient (email address, phone, device token)
+  - `template`: template name (e.g., `"welcome_email"`) or
+  - `template_id`: numeric id
+  - `data`: JSON variables for the template (e.g., `{ "name": "John", "company": "Acme" }`)
+- **Flow**:
+  1. Middleware authenticates API key and sets `request.tenant`.
+  2. View validates payload and resolves template for that tenant.
+  3. Creates a `Notification` row with `status = "pending"`.
+  4. Enqueues `send_notification_task` to Celery via Redis.
+  5. Returns `202 Accepted` with the notification `id` and `status: "pending"`.
+
+### 4. Sending notifications with inline content (no template)
+
+- **API**: `POST /v1/notify/`
+- **Auth**: `X-API-KEY`
+- **Body (inline)**:
+  - `channel`, `to`, `data`
+  - `subject` and `body` provided directly instead of `template`/`template_id`.
+- **Flow**:
+  - Same as template-based send, but `_render_notification` uses the inline `subject`/`body` and Jinja2 + `data` to render content.
+
+### 5. Tracking notification status
+
+- **List notifications for a tenant**
+  - **API**: `GET /v1/notifications/`
+  - **Query params**:
+    - `status` (optional): `pending|processing|sent|failed|delivered`
+    - `channel` (optional): `email|sms|whatsapp|push`
+    - `limit` (optional): default `100`
+  - **Use case**: Dashboard “activity feed” or admin view.
+- **Get single notification**
+  - **API**: `GET /v1/notifications/{id}/`
+  - **Use case**: Show details page, including `provider_response` and `error_message` (if any).
+
+### 6. Investigating failures (Dead Letter Queue)
+
+- **Goal**: See notifications that permanently failed after all retries.
+- **API**: `GET /v1/dead-letters/`
+- **Auth**: `X-API-KEY`
+- **Result**: List of `DeadLetter` entries, including:
+  - `notification_id`, `notification_channel`, `notification_to`
+  - `reason` (what went wrong)
+  - `retry_count`, `created_at`
+- **Typical flow**:
+  - Support/ops checks this endpoint or a dashboard backed by it.
+  - Manually fix configuration (bad email, misconfigured provider, etc.).
+  - Optionally, re-trigger a new notification via `/v1/notify/`.
+
